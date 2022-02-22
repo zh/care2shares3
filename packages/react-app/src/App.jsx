@@ -1,17 +1,22 @@
 import WalletConnectProvider from "@walletconnect/web3-provider";
 import { useThemeSwitcher } from "react-css-theme-switcher";
 import { Button, DatePicker, Image, Space, Menu, Col, Row } from "antd";
+import { Divider, List } from "antd";
+import Moment from "react-moment";
 import "antd/dist/antd.css";
 import React, { useCallback, useEffect, useState } from "react";
 import { HashRouter, Link, Route, Switch } from "react-router-dom";
 import Web3Modal from "web3modal";
 import "./App.css";
 import { Account, Faucet, Contract, Header, NetworkSelect, Ramp, ThemeSwitch } from "./components";
+import { Address, AddressInput } from "./components";
 import { GAS_PRICE, FIAT_PRICE, INFURA_ID, NETWORKS } from "./constants";
 import { Transactor } from "./helpers";
-import { useBalance, useContractLoader, useUserSigner, useExchangePrice } from "./hooks";
+import { useBalance, useContractLoader, useContractReader, useUserSigner, useExchangePrice } from "./hooks";
 
 const { ethers } = require("ethers");
+import moment from "moment";
+
 /*
     Welcome to 🏗 scaffold-multi !
 
@@ -90,6 +95,11 @@ const web3Modal = new Web3Modal({
 function App(props) {
   const [injectedProvider, setInjectedProvider] = useState();
   const [address, setAddress] = useState();
+  const [toAddress, setToAddress] = useState();
+  const [startDate, setStartDate] = useState();
+  const [endDate, setEndDate] = useState();
+  const [duration, setDuration] = useState(0);
+  const [applicants, setApplicants] = useState([]);
   const { RangePicker } = DatePicker;
 
   const logoutOfWeb3Modal = async () => {
@@ -137,10 +147,27 @@ function App(props) {
   // const yourMainnetBalance = useBalance(mainnetProvider, address);
 
   // Load in your local 📝 contract and read a value from it:
-  const readContracts = useContractLoader(localProvider);
+  const readContracts = useContractLoader(userSigner);
 
   // If you want to make 🔐 write transactions to your contracts, use the userSigner:
   const writeContracts = useContractLoader(userSigner, { chainId: localChainId });
+
+  let forRent = useContractReader(readContracts, "Rent", "getAllContracts");
+
+  useEffect(() => {
+    async function getApplicants() {
+      if (!address || !forRent) return;
+      const applicants = forRent
+        .filter(fr => fr.owner === address)
+        .map(async r => {
+          const applicants = await readContracts["Rent"].getApplicants(r.contractId);
+          return { id: r.contractId.toNumber(), applicants };
+        });
+      const all = await Promise.all(applicants);
+      setApplicants(all.filter(a => a.applicants.length > 0));
+    }
+    getApplicants();
+  }, [forRent]);
 
   //
   // 🧫 DEBUG 👨🏻‍🔬
@@ -197,19 +224,166 @@ function App(props) {
 
   useThemeSwitcher();
 
-  const rentProperty = () => {
+  const stateStr = state => {
+    const states = ["Active", "Approved", "Confirmed", "Inactive"];
+    return states[state];
+  };
+
+  const stateColor = state => {
+    const states = ["#f66", "#6f6", "#aaf", "grey"];
+    return states[state];
+  };
+
+  const handleDateChange = range => {
+    const date1 = new Date(range[0]).getTime();
+    const date2 = new Date(range[1]).getTime();
+    const diffTime = moment(date2).diff(date1);
+    const days = diffTime ? moment.duration(diffTime).days() : 0;
+    setDuration(days);
+    setStartDate(Math.floor(date1 / 1000));
+    setEndDate(Math.floor(date2 / 1000));
+  };
+
+  const showTotal = price => {
+    if (!duration) return;
+    const total = (duration * price).toFixed(6);
     return (
-      <div style={{ border: "1px solid #cccccc", padding: 16, width: 640, margin: "auto", marginTop: 64 }}>
-        <h2>Rent property</h2>
-        <Image width={400} height={300} src="https://images.pexels.com/photos/186077/pexels-photo-186077.jpeg" />
+      <div style={{ width: 600, margin: "auto", marginTop: 32, paddingBottom: 32 }}>
+        <div style={{ fontSize: 16 }}>
+          {duration} nights X {price} {coinName} = {total} {coinName}
+        </div>
+      </div>
+    );
+  };
+
+  const showApprove = id => {
+    const app = applicants ? applicants.filter(a => a.id === id) : [];
+    console.log("app: ", app);
+    return (
+      <>
+        <AddressInput placeholder="Enter address" value={toAddress} onChange={setToAddress} />
+        <Button
+          disabled={!toAddress}
+          style={{ marginTop: 8 }}
+          onClick={async () => {
+            tx(writeContracts["Rent"].approveContract(id, toAddress));
+          }}
+        >
+          Approve
+        </Button>
+      </>
+    );
+  };
+
+  const showDeposit = (id, price) => {
+    const wei = parseFloat(ethers.utils.formatEther(`${price}`)).toFixed(6);
+    return (
+      <>
+        <br />
+        <Button
+          style={{ marginTop: 8 }}
+          onClick={async () => {
+            tx(writeContracts["Rent"].payContract(id, { value: price }));
+          }}
+        >
+          Pay {wei} {coinName}
+        </Button>
+      </>
+    );
+  };
+
+  const showApply = id => {
+    return (
+      <>
+        <br />
+        <Button
+          style={{ marginTop: 8 }}
+          onClick={async () => {
+            tx(writeContracts["Rent"].applyForContract(id));
+          }}
+        >
+          Apply
+        </Button>
+      </>
+    )
+  };
+
+  const rentProperty = (propertyId, price, image) => {
+    return (
+      <div style={{ border: "1px solid #cccccc", padding: 16, width: 840, margin: "auto", marginTop: 64 }}>
+        <h2>Property ID={propertyId}</h2>
+        <h3>
+          {price} {coinName} per night
+        </h3>
+        <Image width={400} height={300} src={image} />
         <br />
         <Space direction="vertical" size={12}>
-          <RangePicker />
-        </Space>{" "}
-        <Button style={{ marginTop: 8 }} onClick={async () => {}}>
-          Deposit 0.1 ETH
+          <RangePicker
+            dateFormat="dd/MM/yyyy"
+            minDate={new Date()}
+            showTimeSelect={false}
+            onChange={handleDateChange}
+          />
+        </Space>
+        <br />
+        {showTotal(price)}
+        <Button
+          disabled={!startDate || !endDate || !duration}
+          style={{ marginTop: 8 }}
+          onClick={async () => {
+            const wei = ethers.utils.parseEther(`${price * duration}`);
+            tx(writeContracts["Rent"].addContract(startDate.toFixed(), endDate.toFixed(), propertyId, wei));
+          }}
+        >
+          For Rent
         </Button>
+        {allContracts((forRent || []).filter(r => parseInt(propertyId) === r.propertyId.toNumber()))}
       </div>
+    );
+  };
+
+  const allContracts = rents => {
+    return (
+      <>
+        <div style={{ width: 800, margin: "auto", marginTop: 32, paddingBottom: 32 }}>
+          <h3>Bookings</h3>
+          <List
+            bordered
+            dataSource={rents}
+            renderItem={item => {
+              const contractId = item.contractId.toNumber();
+              return (
+                <List.Item
+                  style={{ backgroundColor: stateColor(item.state) }}
+                  key={item.owner + "_" + item.contractId.toNumber()}
+                >
+                  <h3>
+                    #{contractId} {stateStr(item.state)}
+                  </h3>
+                  <span style={{ fontSize: 16 }}>
+                    <Moment unix format="YYYY-MM-DD">
+                      {item.startDate.toNumber()}
+                    </Moment>
+                  </span>
+                  &nbsp;:&nbsp;
+                  <span style={{ fontSize: 16 }}>
+                    <Moment unix format="YYYY-MM-DD">
+                      {item.endDate.toNumber()}
+                    </Moment>
+                  </span>
+                  &nbsp;Price: <span style={{ fontSize: 16 }}>{parseFloat(ethers.utils.formatEther(item.price)).toFixed(6)}</span>
+                  <br />
+                  Owner: <Address address={item.owner} fontSize={16} />
+                  &nbsp;Renter: <Address address={item.renter} fontSize={16} />
+                  {item.state === 0 && address !== item.owner && showApply(contractId)}
+                  {item.state === 0 && address === item.owner && showApprove(contractId)}
+                  {item.state === 1 && address === item.renter && showDeposit(contractId, item.price)}
+                </List.Item>
+              );
+            }}
+          />
+        </div>
+      </>
     );
   };
 
@@ -227,7 +401,7 @@ function App(props) {
               }}
               to="/"
             >
-              Rent
+              Owner
             </Link>
           </Menu.Item>
           <Menu.Item key="/payment">
@@ -263,7 +437,8 @@ function App(props) {
         </Menu>
         <Switch>
           <Route exact path="/">
-            {rentProperty()}
+            {rentProperty("1", 0.1, "https://images.pexels.com/photos/186077/pexels-photo-186077.jpeg")}
+            {rentProperty("2", 0.2, "https://images.pexels.com/photos/32870/pexels-photo.jpg")}
           </Route>
           <Route exact path="/payment">
             Payment here

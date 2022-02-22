@@ -14,7 +14,7 @@ interface IRent {
         uint256 startDate;
         uint256 endDate;
         address owner;
-        address landlord;
+        address renter;
         uint256 propertyId;
         State state;
         uint256 price; // unit : wei (1 ether == 1e18 wei)
@@ -42,9 +42,11 @@ interface IRent {
         view
         returns (address[] memory);
 
-    function acceptRent(uint256 contractId, address _address) external;
+    function approveContract(uint256 contractId, address _address) external;
+
+    function rejectContract(uint256 contractId, address _address) external;
 
     function applyForContract(uint256 contractId) external;
 
-    function payDeposit(uint256 contractId) external payable;
+    function payContract(uint256 contractId) external payable;
 }

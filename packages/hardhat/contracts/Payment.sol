@@ -75,12 +75,12 @@ contract Payment {
                 billingDate: billingDate,
                 state: State.Pending,
                 payee: _contract.owner,
-                payer: _contract.landlord
+                payer: _contract.renter
             })
         );
 
         contractBillMap[contractId].push(id);
-        userAddressBillMap[_contract.landlord].push(id);
+        userAddressBillMap[_contract.renter].push(id);
 
         emit BillCreated(id);
     }

@@ -10,17 +10,18 @@ contract Rent is IRent {
     mapping(uint256 => address[]) renterMap; // contract Ids -> renter addresses
     mapping(address => uint256[]) renterContractMap; // renter address -> contract Ids
 
-    address[] allLandlords;
+    address[] allRenters;
     address[] allOwners;
 
     // events
     event ContractCreated(uint256 indexed id);
     event AppliedContract(uint256 indexed id, address indexed renter);
-    event ContractApproved(uint256 indexed id, address indexed landlord);
+    event ContractApproved(uint256 indexed id, address indexed owner);
+    event ContractRejected(uint256 indexed id, address indexed owner);
     event DepositReceived(
         uint256 indexed id,
-        address indexed owner,
-        address indexed landlord
+        address indexed renetr,
+        address indexed owner
     );
 
     modifier isOwner(uint256 contractId) {
@@ -31,9 +32,9 @@ contract Rent is IRent {
         _;
     }
 
-    modifier isLandlord(uint256 contractId) {
+    modifier isRenter(uint256 contractId) {
         require(
-            msg.sender == contracts[contractId].landlord,
+            msg.sender == contracts[contractId].renter,
             "Only landlord can call this function."
         );
         _;
@@ -41,7 +42,7 @@ contract Rent is IRent {
 
     modifier isAdmin() {
         require(
-            msg.sender == 0x12Fb1Bd0Dfee8f2f8E7aeBC1aA5830DEFcb404c3,
+            msg.sender == 0x198CF609E94Dea0bD9d503778dbD5f501EACf597,
             "Only admin user can call this function."
         );
         _;
@@ -73,7 +74,7 @@ contract Rent is IRent {
             Contract({
                 contractId: id,
                 owner: msg.sender,
-                landlord: address(0),
+                renter: address(0),
                 startDate: startDate,
                 endDate: endDate,
                 propertyId: propertyId,
@@ -165,13 +166,13 @@ contract Rent is IRent {
         return renterContractMap[_address];
     }
 
-    function acceptRent(uint256 contractId, address _address)
+    function approveContract(uint256 contractId, address _address)
         external
         override
         isOwner(contractId)
     {
         contracts[contractId].state = State.Approved;
-        contracts[contractId].landlord = _address;
+        contracts[contractId].renter = _address;
 
         delete renterMap[contractId];
         // TODO remove the contract from renterContractMap
@@ -180,17 +181,30 @@ contract Rent is IRent {
 
         bool doesListContains = false;
 
-        for (uint256 i = 0; i < allLandlords.length; i++) {
-            if (allLandlords[i] == _address) {
+        for (uint256 i = 0; i < allRenters.length; i++) {
+            if (allRenters[i] == _address) {
                 doesListContains = true;
             }
         }
 
         if (!doesListContains) {
-            allLandlords.push(_address);
+            allRenters.push(_address);
         }
 
         emit ContractApproved(contractId, _address);
+    }
+
+    function rejectContract(uint256 contractId, address _address)
+        external
+        override
+        isOwner(contractId)
+    {
+        contracts[contractId].state = State.Active;
+        contracts[contractId].renter = address(0);
+
+        delete renterMap[contractId];
+
+        emit ContractRejected(contractId, _address);
     }
 
     function applyForContract(uint256 contractId) external override {
@@ -213,11 +227,11 @@ contract Rent is IRent {
         return renterMap[contractId];
     }
 
-    function payDeposit(uint256 contractId)
+    function payContract(uint256 contractId)
         external
         payable
         override
-        isLandlord(contractId)
+        isRenter(contractId)
         inState(contractId, State.Approved)
     {
         //require(msg.value == contracts[contractId].price, "Price is incorrect.");
@@ -232,8 +246,8 @@ contract Rent is IRent {
         );
     }
 
-    function getLandlords() external view isAdmin returns (address[] memory) {
-        return allLandlords;
+    function getRenters() external view isAdmin returns (address[] memory) {
+        return allRenters;
     }
 
     function getOwners() external view isAdmin returns (address[] memory) {
