@@ -1,7 +1,8 @@
 require("dotenv").config();
 
-export const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
+export const IPFS_GATEWAY = "https://gateway.pinata.cloud/ipfs/";
 export const INFURA_ID = process.env.REACT_APP_INFURA_KEY;
+export const ALCHEMY_RINKEBY_URL = process.env.REACT_APP_ALCHEMY_RINKEBY_URL;
 export const ETHERSCAN_KEY = process.env.REACT_APP_ETHERSCAN_KEY;
 // BLOCKNATIVE ID FOR Notify.js:
 export const BLOCKNATIVE_DAPPID = "0b58206a-f3c0-4701-a62f-73c7243e8c77";
@@ -17,12 +18,21 @@ export const NETWORKS = {
     blockExplorer: "",
     rpcUrl: "http://" + window.location.hostname + ":8545",
   },
+  kovan: {
+    name: "kovan",
+    color: "#7003DD",
+    chainId: 42,
+    coin: "ETH",
+    rpcUrl: `https://kovan.infura.io/v3/${INFURA_ID}`,
+    blockExplorer: "https://kovan.etherscan.io/",
+    faucet: "https://gitter.im/kovan-testnet/faucet", // https://faucet.kovan.network/
+  },
   rinkeby: {
     name: "rinkeby",
-    color: "#7003DD",
+    color: "#2bbdf7",
     chainId: 4,
     coin: "ETH",
-    rpcUrl: `https://rinkeby.infura.io/v3/${INFURA_ID}`,
+    rpcUrl: ALCHEMY_RINKEBY_URL,
     blockExplorer: "https://rinkeby.etherscan.io/",
   },
   xdai: {
@@ -209,44 +219,6 @@ export const NETWORKS = {
     blockExplorer: "https://www.bscscan.com/",
     gasPrice: 20000000000,
   },
-  testnetTelos: {
-    name: "Telos EVM Testnet",
-    color: "#ff8b9e",
-    chainId: 41,
-    coin: "TLOS",
-    rpcUrl: "https://testnet.telos.net/evm",
-    blockExplorer: "https://testnet.teloscan.io/",
-    gasPrice: 500000000000,
-  },
-  mainnetTelos: {
-    name: "Telos EVM Mainnet",
-    color: "#00b0ef",
-    chainId: 40,
-    coin: "TLOS",
-    rpcUrl: "https://mainnet.telos.net/evm",
-    blockExplorer: "https://teloscan.io/",
-    gasPrice: 500000000000,
-  },
-  testnetAurora: {
-    name: "Aurora Testnet",
-    color: "#ff8b9e",
-    chainId: 1313161555,
-    coin: "aETH",
-    rpcUrl: "https://testnet.aurora.dev",
-    faucet: "https://aurora.dev/faucet",
-    blockExplorer: "https://explorer.testnet.aurora.dev/",
-    gasPrice: 120 * 1000000000,
-  },
-  mainnetAurora: {
-    name: "Aurora Mainnet",
-    color: "#00b0ef",
-    chainId: 1313161554,
-    coin: "aETH",
-    rpcUrl: "https://mainnet.aurora.dev",
-    faucet: "https://aurora.dev/faucet",
-    blockExplorer: "https://explorer.mainnet.aurora.dev/",
-    gasPrice: 120 * 1000000000,
-  },
   bakerloo: {
     name: "Autonity Bakerloo",
     color: "#ff8b9e",
@@ -276,4 +248,4 @@ export const NETWORK = chainId => {
   }
 };
 
-export const GAS_PRICE = 1000000000; // fix this for your network
+export const GAS_PRICE = 1050000000; // fix this for your network

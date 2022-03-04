@@ -1,21 +1,35 @@
 import WalletConnectProvider from "@walletconnect/web3-provider";
 import { useThemeSwitcher } from "react-css-theme-switcher";
-import { Button, DatePicker, Image, Space, Menu, Col, Row } from "antd";
-import { Divider, List } from "antd";
-import Moment from "react-moment";
+import StackGrid from "react-stack-grid";
+import { Button, Card, Col, List, Menu, Row } from "antd";
 import "antd/dist/antd.css";
 import React, { useCallback, useEffect, useState } from "react";
 import { HashRouter, Link, Route, Switch } from "react-router-dom";
 import Web3Modal from "web3modal";
 import "./App.css";
-import { Account, Faucet, Contract, Header, NetworkSelect, Ramp, ThemeSwitch } from "./components";
-import { Address, AddressInput } from "./components";
-import { GAS_PRICE, FIAT_PRICE, INFURA_ID, NETWORKS } from "./constants";
-import { Transactor } from "./helpers";
-import { useBalance, useContractLoader, useContractReader, useUserSigner, useExchangePrice } from "./hooks";
+import {
+  Address,
+  Account,
+  Contract,
+  Faucet,
+  Header,
+  NetworkSelect,
+  Ramp,
+  ThemeSwitch,
+} from "./components";
+import { GAS_PRICE, FIAT_PRICE, INFURA_ID, NETWORKS, OWNER_ADDR } from "./constants";
+import { Transactor, formatUri } from "./helpers";
+import {
+  useBalance,
+  useContractLoader,
+  useContractReader,
+  useUserSigner,
+  useEventListener,
+  useExchangePrice,
+} from "./hooks";
+import { Events, MintProperty } from "./views";
 
 const { ethers } = require("ethers");
-import moment from "moment";
 
 /*
     Welcome to 🏗 scaffold-multi !
@@ -28,6 +42,7 @@ const targetNetwork = NETWORKS.localhost;
 // const targetNetwork = NETWORKS.rinkeby;
 // const targetNetwork = NETWORKS.polygon;
 // const targetNetwork = NETWORKS.mumbai;
+// const targetNetwork = NETWORKS.testnetSmartBCH;
 // const targetNetwork = NETWORKS.testnetSmartBCH;
 // const targetNetwork = NETWORKS.mainnetSmartBCH;
 // const targetNetwork = NETWORKS.fujiAvalanche;
@@ -42,15 +57,14 @@ const targetNetwork = NETWORKS.localhost;
 // const targetNetwork = NETWORKS.mainnetTomo;
 // const targetNetwork = NETWORKS.testnetBSC;
 // const targetNetwork = NETWORKS.mainnetBSC;
-// const targetNetwork = NETWORKS.testnetTelos;
-// const targetNetwork = NETWORKS.mainnetTelos;
-// const targetNetwork = NETWORKS.testnetAurora;
-// const targetNetwork = NETWORKS.mainnetAurora;
 // const targetNetwork = NETWORKS.bakerloo;
 // const targetNetwork = NETWORKS.kaleido;
 
 // 😬 Sorry for all the console logging
 const DEBUG = false;
+
+const propertyName = "Property";
+const bookingName = "Booking";
 const coinName = targetNetwork.coin || "ETH";
 
 // 🛰 providers
@@ -95,12 +109,6 @@ const web3Modal = new Web3Modal({
 function App(props) {
   const [injectedProvider, setInjectedProvider] = useState();
   const [address, setAddress] = useState();
-  const [toAddress, setToAddress] = useState();
-  const [startDate, setStartDate] = useState();
-  const [endDate, setEndDate] = useState();
-  const [duration, setDuration] = useState(0);
-  const [applicants, setApplicants] = useState([]);
-  const { RangePicker } = DatePicker;
 
   const logoutOfWeb3Modal = async () => {
     await web3Modal.clearCachedProvider();
@@ -147,27 +155,10 @@ function App(props) {
   // const yourMainnetBalance = useBalance(mainnetProvider, address);
 
   // Load in your local 📝 contract and read a value from it:
-  const readContracts = useContractLoader(userSigner);
+  const readContracts = useContractLoader(localProvider);
 
   // If you want to make 🔐 write transactions to your contracts, use the userSigner:
   const writeContracts = useContractLoader(userSigner, { chainId: localChainId });
-
-  let forRent = useContractReader(readContracts, "Rent", "getAllContracts");
-
-  useEffect(() => {
-    async function getApplicants() {
-      if (!address || !forRent) return;
-      const applicants = forRent
-        .filter(fr => fr.owner === address)
-        .map(async r => {
-          const applicants = await readContracts["Rent"].getApplicants(r.contractId);
-          return { id: r.contractId.toNumber(), applicants };
-        });
-      const all = await Promise.all(applicants);
-      setApplicants(all.filter(a => a.applicants.length > 0));
-    }
-    getApplicants();
-  }, [forRent]);
 
   //
   // 🧫 DEBUG 👨🏻‍🔬
@@ -224,168 +215,164 @@ function App(props) {
 
   useThemeSwitcher();
 
-  const stateStr = state => {
-    const states = ["Active", "Approved", "Confirmed", "Inactive"];
-    return states[state];
-  };
+  // 📟 Listen for broadcast events
+  const mintEvents = useEventListener(readContracts, propertyName, "Minted", localProvider, 1);
+  const rentEvents = useEventListener(readContracts, propertyName, "Rented", localProvider, 1);
+  // console.log("📟 Property Mint events: ", mintEvents);
+  // console.log("📟 Property Rent events: ", rentEvents);
 
-  const stateColor = state => {
-    const states = ["#f66", "#6f6", "#aaf", "grey"];
-    return states[state];
-  };
+  const _propertyBalance = useContractReader(readContracts, propertyName, "balanceOf", [address]);
+  const propertiesCount = _propertyBalance && _propertyBalance.toNumber && _propertyBalance.toNumber();
+  if (DEBUG) console.log("🤗 Properties count: ", propertiesCount);
+  // Loading Properties
+  const [yourProperties, setYourProperties] = useState();
+  useEffect(() => {
+    const updateYourProperties = async () => {
+      const propertiesUpdate = [];
+      for (let idx = 0; idx < propertiesCount; idx++) {
+        try {
+          const tokenId = await readContracts[propertyName].tokenOfOwnerByIndex(address, idx);
+          const websiteId = await readContracts[propertyName].tokenURI(tokenId);
+          const available = await readContracts[propertyName].bookingAllowed(tokenId);
+          const reserved = await readContracts[propertyName].propertyReserved(tokenId);
+          const currentProperty = {
+            id: tokenId,
+            owner: address,
+            websiteId,
+            available,
+            reserved,
+          };
+          propertiesUpdate.push(currentProperty);
+        } catch (e) {
+          console.log(e);
+        }
+      }
+      setYourProperties(propertiesUpdate);
+    };
+    if (readContracts && readContracts[propertyName]) updateYourProperties();
+  }, [address, propertiesCount, rentEvents, mintEvents]);
 
-  const handleDateChange = range => {
-    const date1 = new Date(range[0]).getTime();
-    const date2 = new Date(range[1]).getTime();
-    const diffTime = moment(date2).diff(date1);
-    const days = diffTime ? moment.duration(diffTime).days() : 0;
-    setDuration(days);
-    setStartDate(Math.floor(date1 / 1000));
-    setEndDate(Math.floor(date2 / 1000));
-  };
+  const _totalSupply = useContractReader(readContracts, propertyName, "totalSupply");
+  const allPropertiesCount = _totalSupply && _totalSupply.toNumber && _totalSupply.toNumber();
+  const [availableProperties, setAvailableProperties] = useState();
+  if (DEBUG) console.log("🤗 All Properties count: ", allPropertiesCount);
+  useEffect(() => {
+    const updateAvailableProperties = async () => {
+      const availableUpdate = [];
+      for (let idx = 1; idx <= allPropertiesCount; idx++) {
+        try {
+          const owner = await readContracts[propertyName].ownerOf(idx);
+          const websiteId = await readContracts[propertyName].tokenURI(idx);
+          const available = await readContracts[propertyName].bookingAllowed(idx);
+          const reserved = await readContracts[propertyName].propertyReserved(idx);
+          const currentProperty = {
+            id: idx,
+            owner,
+            websiteId,
+            available,
+            reserved,
+          };
+          if (available) {
+            availableUpdate.push(currentProperty);
+          }
+        } catch (e) {
+          console.log(e);
+        }
+      }
+      setAvailableProperties(availableUpdate);
+      console.log("available: ", availableUpdate);
+    };
+    if (readContracts && readContracts[propertyName] && allPropertiesCount > 0) updateAvailableProperties();
+  }, [allPropertiesCount, rentEvents, mintEvents]);
 
-  const showTotal = price => {
-    if (!duration) return;
-    const total = (duration * price).toFixed(6);
-    return (
-      <div style={{ width: 600, margin: "auto", marginTop: 32, paddingBottom: 32 }}>
-        <div style={{ fontSize: 16 }}>
-          {duration} nights X {price} {coinName} = {total} {coinName}
-        </div>
-      </div>
-    );
-  };
-
-  const showApprove = id => {
-    const app = applicants ? applicants.filter(a => a.id === id) : [];
-    console.log("app: ", app);
-    return (
-      <>
-        <AddressInput placeholder="Enter address" value={toAddress} onChange={setToAddress} />
+  const OwnerNftCard = item => {
+    const id = item.id.toNumber();
+    const cardActions = [];
+    if (item.reserved) {
+      cardActions.push(
         <Button
-          disabled={!toAddress}
-          style={{ marginTop: 8 }}
-          onClick={async () => {
-            tx(writeContracts["Rent"].approveContract(id, toAddress));
+          onClick={() => {
+            tx(writeContracts[propertyName].cancelBooking(id));
           }}
         >
-          Approve
-        </Button>
+          Free
+        </Button>,
+      );
+    } else {
+      cardActions.push(
+        <Button
+          onClick={() => {
+            tx(writeContracts[propertyName].toggleStatus(id));
+          }}
+        >
+          {item.available ? "Deny " : "Allow "} booking
+        </Button>,
+      );
+      cardActions.push(
+        <Button
+          onClick={() => {
+            tx(writeContracts[propertyName].reserveProperty(id));
+          }}
+        >
+          Reserve
+        </Button>,
+      );
+    }
+    return (
+      <>
+        <Card
+          key={item.id}
+          actions={cardActions}
+          title={
+            <div>
+              <span style={{ fontSize: 16, marginRight: 8 }}>#{id}</span> ID: {item.websiteId}
+            </div>
+          }
+        >
+          owner:
+          <Address address={item.owner} blockExplorer={blockExplorer} fontSize={16} />
+        </Card>
       </>
     );
   };
 
-  const showDeposit = (id, price) => {
-    const wei = parseFloat(ethers.utils.formatEther(`${price}`)).toFixed(6);
+  const NftCard = item => {
+    const cardActions = [];
+    console.log(item.owner, address);
+    if (item.owner != address) {
+      cardActions.push(
+        <div>
+          owned by:
+          <Address address={item.owner} blockExplorer={blockExplorer} minimized />
+        </div>,
+        <Button onClick={() => {}}>Book</Button>,
+      );
+    } else {
+      cardActions.push(<div>OWN ASSET</div>);
+    }
     return (
-      <>
-        <br />
-        <Button
-          style={{ marginTop: 8 }}
-          onClick={async () => {
-            tx(writeContracts["Rent"].payContract(id, { value: price }));
-          }}
-        >
-          Pay {wei} {coinName}
-        </Button>
-      </>
+      <Card
+        style={{ width: 200 }}
+        key={item.id}
+        actions={cardActions}
+        title={
+          <div>
+            <span style={{ fontSize: props.fontSize || 16, marginRight: 8 }}>#{item.id}</span>
+            ID: {item.websiteId}{" "}
+          </div>
+        }
+      >
+        <div style={{ opacity: 0.77 }}>Start Date - End date</div>
+        <div style={{ padding: 3, fontWeight: "bold" }}>Price: 0.0 {coinName}</div>
+      </Card>
     );
   };
 
-  const showApply = id => {
-    return (
-      <>
-        <br />
-        <Button
-          style={{ marginTop: 8 }}
-          onClick={async () => {
-            tx(writeContracts["Rent"].applyForContract(id));
-          }}
-        >
-          Apply
-        </Button>
-      </>
-    )
-  };
-
-  const rentProperty = (propertyId, price, image) => {
-    return (
-      <div style={{ border: "1px solid #cccccc", padding: 16, width: 840, margin: "auto", marginTop: 64 }}>
-        <h2>Property ID={propertyId}</h2>
-        <h3>
-          {price} {coinName} per night
-        </h3>
-        <Image width={400} height={300} src={image} />
-        <br />
-        <Space direction="vertical" size={12}>
-          <RangePicker
-            dateFormat="dd/MM/yyyy"
-            minDate={new Date()}
-            showTimeSelect={false}
-            onChange={handleDateChange}
-          />
-        </Space>
-        <br />
-        {showTotal(price)}
-        <Button
-          disabled={!startDate || !endDate || !duration}
-          style={{ marginTop: 8 }}
-          onClick={async () => {
-            const wei = ethers.utils.parseEther(`${price * duration}`);
-            tx(writeContracts["Rent"].addContract(startDate.toFixed(), endDate.toFixed(), propertyId, wei));
-          }}
-        >
-          For Rent
-        </Button>
-        {allContracts((forRent || []).filter(r => parseInt(propertyId) === r.propertyId.toNumber()))}
-      </div>
-    );
-  };
-
-  const allContracts = rents => {
-    return (
-      <>
-        <div style={{ width: 800, margin: "auto", marginTop: 32, paddingBottom: 32 }}>
-          <h3>Bookings</h3>
-          <List
-            bordered
-            dataSource={rents}
-            renderItem={item => {
-              const contractId = item.contractId.toNumber();
-              return (
-                <List.Item
-                  style={{ backgroundColor: stateColor(item.state) }}
-                  key={item.owner + "_" + item.contractId.toNumber()}
-                >
-                  <h3>
-                    #{contractId} {stateStr(item.state)}
-                  </h3>
-                  <span style={{ fontSize: 16 }}>
-                    <Moment unix format="YYYY-MM-DD">
-                      {item.startDate.toNumber()}
-                    </Moment>
-                  </span>
-                  &nbsp;:&nbsp;
-                  <span style={{ fontSize: 16 }}>
-                    <Moment unix format="YYYY-MM-DD">
-                      {item.endDate.toNumber()}
-                    </Moment>
-                  </span>
-                  &nbsp;Price: <span style={{ fontSize: 16 }}>{parseFloat(ethers.utils.formatEther(item.price)).toFixed(6)}</span>
-                  <br />
-                  Owner: <Address address={item.owner} fontSize={16} />
-                  &nbsp;Renter: <Address address={item.renter} fontSize={16} />
-                  {item.state === 0 && address !== item.owner && showApply(contractId)}
-                  {item.state === 0 && address === item.owner && showApprove(contractId)}
-                  {item.state === 1 && address === item.renter && showDeposit(contractId, item.price)}
-                </List.Item>
-              );
-            }}
-          />
-        </div>
-      </>
-    );
-  };
+  const galleryList = [];
+  for (let a in availableProperties) {
+    console.log("item: ", availableProperties[a]);
+    galleryList.push(NftCard(availableProperties[a]));
+  }
 
   return (
     <div className="App">
@@ -401,70 +388,88 @@ function App(props) {
               }}
               to="/"
             >
-              Owner
+              For booking
             </Link>
           </Menu.Item>
-          <Menu.Item key="/payment">
+          <Menu.Item key="/owner">
             <Link
               onClick={() => {
-                setRoute("/payment");
+                setRoute("/owner");
               }}
-              to="/payment"
+              to="/owner"
             >
-              Payment
+              Properties
             </Link>
           </Menu.Item>
-          <Menu.Item key="/debugrent">
+          <Menu.Item key="/mint">
             <Link
               onClick={() => {
-                setRoute("/debugrent");
+                setRoute("/mint");
               }}
-              to="/debugrent"
+              to="/mint"
             >
-              Debug Rent
+              Mint
             </Link>
           </Menu.Item>
-          <Menu.Item key="/debugpayment">
-            <Link
-              onClick={() => {
-                setRoute("/debugpayment");
-              }}
-              to="/debugpayment"
-            >
-              Debug Payment
-            </Link>
-          </Menu.Item>
+          {address && (
+            <>
+              <Menu.Item key="/debug">
+                <Link
+                  onClick={() => {
+                    setRoute("/debug");
+                  }}
+                  to="/debug"
+                >
+                  Debug Property
+                </Link>
+              </Menu.Item>
+            </>
+          )}
         </Menu>
         <Switch>
           <Route exact path="/">
-            {rentProperty("1", 0.1, "https://images.pexels.com/photos/186077/pexels-photo-186077.jpeg")}
-            {rentProperty("2", 0.2, "https://images.pexels.com/photos/32870/pexels-photo.jpg")}
+            <div style={{ width: 640, margin: "auto", marginTop: 32, paddingBottom: 32 }}>
+              <StackGrid columnWidth={200} gutterWidth={16} gutterHeight={16}>
+                {galleryList}
+              </StackGrid>
+            </div>
           </Route>
-          <Route exact path="/payment">
-            Payment here
+          <Route path="/owner">
+            <div style={{ width: 640, margin: "auto", marginTop: 32, paddingBottom: 32 }}>
+              <List
+                bordered
+                dataSource={yourProperties}
+                renderItem={item => {
+                  const id = item.id.toNumber();
+                  return <List.Item key={id + "_" + item.websiteId + "_" + item.owner}>{OwnerNftCard(item)}</List.Item>;
+                }}
+              />
+            </div>
           </Route>
-          <Route exact path="/debugrent">
-            <Contract
-              name="Rent"
+          <Route path="/mint">
+            <MintProperty
               address={address}
-              signer={userSigner}
-              provider={localProvider}
-              blockExplorer={blockExplorer}
+              tx={tx}
+              contractName={propertyName}
+              writeContracts={writeContracts}
               gasPrice={gasPrice}
-              chainId={localChainId}
             />
           </Route>
-          <Route path="/debugpayment">
-            <Contract
-              name="Payment"
-              address={address}
-              signer={userSigner}
-              provider={localProvider}
-              blockExplorer={blockExplorer}
-              gasPrice={gasPrice}
-              chainId={localChainId}
-            />
-          </Route>
+          {address && (
+            <>
+              <Route path="/debug">
+                <Contract
+                  name={propertyName}
+                  address={address}
+                  signer={userSigner}
+                  provider={localProvider}
+                  blockExplorer={blockExplorer}
+                  gasPrice={gasPrice}
+                  chainId={localChainId}
+                />
+              </Route>
+            </>
+          )}
         </Switch>
       </HashRouter>
 

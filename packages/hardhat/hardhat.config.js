@@ -18,7 +18,7 @@ const defaultNetwork = process.env.NETWORK || "localhost";
 const infuraKey = process.env.INFURA_KEY;
 const deployerAddress = process.env.DEPLOYER;
 const walletURL = process.env.WALLET_URL || "http://localhost:3000";
-const tokensContract = "YourToken";
+const tokensContract = "AwesomeAssets";
 
 /*
       📡 This is where you configure your deploy configuration for 🏗 scaffold-eth
@@ -53,9 +53,14 @@ module.exports = {
     localhost: {
       url: "http://localhost:8545",
     },
+    kovan: {
+      url: "https://kovan.infura.io/v3/" + infuraKey,
+      accounts: {
+        mnemonic: mnemonic(),
+      },
+    },
     rinkeby: {
-      url: "https://rinkeby.infura.io/v3/" + infuraKey,
-      chainId: 4,
+      url: process.env.ALCHEMY_RINKEBY_URL,
       accounts: {
         mnemonic: mnemonic("testnet"),
       },
@@ -219,38 +224,6 @@ module.exports = {
         mnemonic: mnemonic(),
       },
     },
-    testnetTelos: {
-      url: "https://testnet.telos.net/evm",
-      chainId: 41,
-      gasPrice: 500000000000,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
-    },
-    mainnetTelos: {
-      url: "https://mainnet.telos.net/evm",
-      chainId: 40,
-      gasPrice: 500000000000,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
-    },
-    testnetAurora: {
-      url: "https://testnet.aurora.dev",
-      chainId: 1313161555,
-      gasPrice: 120 * 1000000000,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
-    },
-    mainnetAurora: {
-      url: "https://mainnet.aurora.dev",
-      chainId: 1313161554,
-      gasPrice: 120 * 1000000000,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
-    },
     bakerloo: {
       url: "https://rpc4.bakerloo.autonity.network:8545",
       chainId: 444900,
@@ -312,7 +285,6 @@ module.exports = {
     mainnetAva: deployerAddress,
     testnetFantom: deployerAddress,
     fantomOpera: deployerAddress,
-    testnetAurora: deployerAddress,
   },
 };
 

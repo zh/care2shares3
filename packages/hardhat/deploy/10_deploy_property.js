@@ -3,15 +3,9 @@
 module.exports = async ({ getNamedAccounts, deployments }) => {
   const { deploy } = deployments;
   const { deployer } = await getNamedAccounts();
-  const rent = await deploy("Rent", {
+  await deploy("Property", {
     from: deployer,
-    log: true,
-  });
-
-  await deploy("Payment", {
-    from: deployer,
-    args: [rent.address],
     log: true,
   });
 };
-module.exports.tags = ["Payment"];
+module.exports.tags = ["Property"];
