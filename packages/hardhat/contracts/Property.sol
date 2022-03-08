@@ -22,18 +22,59 @@ contract Property is
 
     Counters.Counter private _tokenIdCounter;
 
-    struct Booking {
-        address renter;
-        uint256 price;
-        // add start and end date
-        bool paid;
-        bool available;
+    enum State {
+        Active, // A booking has been created by the user waiting for confirm.
+        Confirmed, // The owner has confirmed and is waiting to receive a deposit.
+        Paid, // The user paid a deposit and the booking has successfully concluded.
+        Reserved, // The property is reserved by the owner
+        Inactive // A booking has been removed by the owner's request.
     }
 
-    mapping(uint256 => Booking) _bookingById;
+    struct Booking {
+        address renter;
+        // add start and end date
+        uint256 startDate;
+        uint256 endDate;
+        State state;
+        uint256 price;
+    }
+
+    mapping(uint256 => Booking) _bookingById; // property <-> bookings map
+
+    modifier isPropOwner(uint256 _propertyId) {
+        require(
+            msg.sender == ownerOf(_propertyId),
+            "Only owner can call this function."
+        );
+        _;
+    }
+
+    modifier inState(uint256 _propertyId, State state) {
+        require(
+            state == _bookingById[_propertyId].state,
+            "Booking is not in valid state."
+        );
+        _;
+    }
+
+    modifier isRenter(uint256 _propertyId) {
+        require(
+            msg.sender == _bookingById[_propertyId].renter,
+            "Only renter can call this function."
+        );
+        _;
+    }
+
+    modifier inCancelPeriod(uint256 _propertyId) {
+        require(
+            block.timestamp + 7 days < _bookingById[_propertyId].startDate,
+            "Booking cannot be canceled."
+        );
+        _;
+    }
 
     event Minted(uint256 id, address owner);
-    event Rented(uint256 id, address renter, string action);
+    event Booked(uint256 id, address renter, string action);
 
     constructor() ERC721("Care2Share Properties", "CARE2SHARE") {}
 
@@ -58,57 +99,107 @@ contract Property is
         return tokenId;
     }
 
+    // TODO: make this work with multiply bookings
     function getBooking(uint256 _propertyId)
         external
         view
         returns (Booking memory)
     {
-        Booking memory book = _getBooking(_propertyId);
-        console.log("owner: %s, renter: %s", ownerOf(_propertyId), book.renter);
-        require(
-            msg.sender == ownerOf(_propertyId),
-            "only property owner can return the booking"
-        );
         return _getBooking(_propertyId);
     }
 
-    // TODO: make it payable
-    function createBooking(uint256 _propertyId) external {
-        // check if exists and booking allowed
+    // created by the renter
+    function createBooking(
+        uint256 _propertyId,
+        uint256 _startDate,
+        uint256 _endDate
+    ) external inState(_propertyId, State.Inactive) {
+        require(_endDate >= _startDate, "end date after start date");
+        // check price
         _bookingById[_propertyId] = Booking({
             renter: msg.sender,
-            price: 0 ether,
-            paid: false,
-            available: false
+            startDate: _startDate,
+            endDate: _endDate,
+            state: State.Active,
+            price: 0 ether
         });
-        emit Rented(_propertyId, msg.sender, "booking");
+        emit Booked(_propertyId, msg.sender, "booking");
     }
 
-    function cancelBooking(uint256 _propertyId) external {
-        require(
-            msg.sender == ownerOf(_propertyId),
-            "only property owner can cancel the booking"
-        );
+    function cancelBooking(uint256 _propertyId)
+        external
+        inCancelPeriod(_propertyId)
+        isRenter(_propertyId)
+    {
         _freeBooking(_propertyId);
+    }
+
+    function rejectBooking(uint256 _propertyId)
+        external
+        isPropOwner(_propertyId)
+    {
+        _freeBooking(_propertyId);
+    }
+
+    function confirmBooking(uint256 _propertyId, uint256 _price)
+        external
+        isPropOwner(_propertyId)
+        inState(_propertyId, State.Active)
+    {
+        require(_price > 0, "Price should be set to > 0");
+        _bookingById[_propertyId].state = State.Confirmed;
+        _bookingById[_propertyId].price = _price;
+        emit Booked(_propertyId, msg.sender, "confirmed");
     }
 
     function bookingAllowed(uint256 _propertyId) external view returns (bool) {
         Booking memory book = _getBooking(_propertyId);
-        return book.available;
+        return book.state == State.Inactive;
     }
 
-    function reserveProperty(uint256 _propertyId) external {
+    function bookingConfirmed(uint256 _propertyId)
+        external
+        view
+        returns (bool)
+    {
+        Booking memory book = _getBooking(_propertyId);
+        return book.state == State.Confirmed;
+    }
+
+    // TODO: make this payable
+    function payBooking(uint256 _propertyId)
+        external
+        inState(_propertyId, State.Confirmed)
+    {
+        _bookingById[_propertyId].state = State.Paid;
+        emit Booked(_propertyId, msg.sender, "paid");
+    }
+
+    // maybe only booking owner?
+    function bookingPaid(uint256 _propertyId) external view returns (bool) {
+        Booking memory book = _getBooking(_propertyId);
+        return book.state == State.Paid;
+    }
+
+    function reserveProperty(
+        uint256 _propertyId,
+        uint256 _startDate,
+        uint256 _endDate
+    ) external isPropOwner(_propertyId) {
+        require(_endDate >= _startDate, "end date after start date");
+        Booking memory book = _getBooking(_propertyId);
         require(
-            msg.sender == ownerOf(_propertyId),
-            "only property owner can cancel the booking"
+            book.state != State.Active && book.state != State.Confirmed,
+            "property is already rented"
         );
         _bookingById[_propertyId] = Booking({
             renter: msg.sender,
-            price: 0 ether,
-            paid: true,
-            available: false
+            startDate: _startDate,
+            endDate: _endDate,
+            state: State.Reserved,
+            price: 0 ether
         });
-        emit Rented(_propertyId, msg.sender, "reserve");
+        emit Booked(_propertyId, msg.sender, "reserved");
     }
 
     function propertyReserved(uint256 _propertyId)
@@ -117,17 +208,7 @@ contract Property is
         returns (bool)
     {
         Booking memory book = _getBooking(_propertyId);
-        return book.available == false && book.renter == ownerOf(_propertyId);
-    }
-
-    function toggleStatus(uint256 _propertyId) external {
-        require(
-            msg.sender == ownerOf(_propertyId),
-            "only property owner can return the booking"
-        );
-        Booking storage book = _bookingById[_propertyId];
-        book.available = !book.available;
-        emit Rented(_propertyId, msg.sender, book.available ? "allow" : "deny");
+        return book.state == State.Reserved;
     }
 
     // internal functions
@@ -135,11 +216,12 @@ contract Property is
     function _freeBooking(uint256 _propertyId) internal {
         _bookingById[_propertyId] = Booking({
             renter: address(0),
-            price: 0 ether,
-            paid: false,
-            available: false
+            startDate: block.timestamp,
+            endDate: block.timestamp + 1 days,
+            state: State.Inactive,
+            price: 0 ether
         });
-        emit Rented(_propertyId, msg.sender, "free");
+        emit Booked(_propertyId, msg.sender, "free");
     }
 
     function _getBooking(uint256 _propertyId)

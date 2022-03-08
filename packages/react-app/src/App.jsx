@@ -1,24 +1,15 @@
 import WalletConnectProvider from "@walletconnect/web3-provider";
 import { useThemeSwitcher } from "react-css-theme-switcher";
 import StackGrid from "react-stack-grid";
-import { Button, Card, Col, List, Menu, Row } from "antd";
+import { Button, Card, Col, List, Menu, Row, DatePicker, Space } from "antd";
 import "antd/dist/antd.css";
 import React, { useCallback, useEffect, useState } from "react";
 import { HashRouter, Link, Route, Switch } from "react-router-dom";
 import Web3Modal from "web3modal";
 import "./App.css";
-import {
-  Address,
-  Account,
-  Contract,
-  Faucet,
-  Header,
-  NetworkSelect,
-  Ramp,
-  ThemeSwitch,
-} from "./components";
+import { Address, Account, Contract, Faucet, Header, NetworkSelect, Ramp, ThemeSwitch, EtherInput } from "./components";
 import { GAS_PRICE, FIAT_PRICE, INFURA_ID, NETWORKS, OWNER_ADDR } from "./constants";
-import { Transactor, formatUri } from "./helpers";
+import { Transactor } from "./helpers";
 import {
   useBalance,
   useContractLoader,
@@ -27,7 +18,8 @@ import {
   useEventListener,
   useExchangePrice,
 } from "./hooks";
-import { Events, MintProperty } from "./views";
+import { MintProperty } from "./views";
+import moment from "moment";
 
 const { ethers } = require("ethers");
 
@@ -64,7 +56,6 @@ const targetNetwork = NETWORKS.localhost;
 const DEBUG = false;
 
 const propertyName = "Property";
-const bookingName = "Booking";
 const coinName = targetNetwork.coin || "ETH";
 
 // 🛰 providers
@@ -109,6 +100,12 @@ const web3Modal = new Web3Modal({
 function App(props) {
   const [injectedProvider, setInjectedProvider] = useState();
   const [address, setAddress] = useState();
+  const { RangePicker } = DatePicker;
+  const [startDate, setStartDate] = useState();
+  const [endDate, setEndDate] = useState();
+  const [startBookDate, setStartBookDate] = useState();
+  const [endBookDate, setEndBookDate] = useState();
+  const [amount, setAmount] = useState();
 
   const logoutOfWeb3Modal = async () => {
     await web3Modal.clearCachedProvider();
@@ -217,7 +214,7 @@ function App(props) {
 
   // 📟 Listen for broadcast events
   const mintEvents = useEventListener(readContracts, propertyName, "Minted", localProvider, 1);
-  const rentEvents = useEventListener(readContracts, propertyName, "Rented", localProvider, 1);
+  const rentEvents = useEventListener(readContracts, propertyName, "Booked", localProvider, 1);
   // console.log("📟 Property Mint events: ", mintEvents);
   // console.log("📟 Property Rent events: ", rentEvents);
 
@@ -233,15 +230,14 @@ function App(props) {
         try {
           const tokenId = await readContracts[propertyName].tokenOfOwnerByIndex(address, idx);
           const websiteId = await readContracts[propertyName].tokenURI(tokenId);
-          const available = await readContracts[propertyName].bookingAllowed(tokenId);
-          const reserved = await readContracts[propertyName].propertyReserved(tokenId);
+          const booking = await readContracts[propertyName].getBooking(tokenId);
           const currentProperty = {
             id: tokenId,
             owner: address,
             websiteId,
-            available,
-            reserved,
+            booking,
           };
+          console.log("owner properties: ", currentProperty);
           propertiesUpdate.push(currentProperty);
         } catch (e) {
           console.log(e);
@@ -261,18 +257,18 @@ function App(props) {
       const availableUpdate = [];
       for (let idx = 1; idx <= allPropertiesCount; idx++) {
         try {
-          const owner = await readContracts[propertyName].ownerOf(idx);
-          const websiteId = await readContracts[propertyName].tokenURI(idx);
-          const available = await readContracts[propertyName].bookingAllowed(idx);
-          const reserved = await readContracts[propertyName].propertyReserved(idx);
-          const currentProperty = {
-            id: idx,
-            owner,
-            websiteId,
-            available,
-            reserved,
-          };
-          if (available) {
+          const booking = await readContracts[propertyName].getBooking(idx);
+          if (booking.state !== 3) {
+            // do not show reserved properties
+            const owner = await readContracts[propertyName].ownerOf(idx);
+            const websiteId = await readContracts[propertyName].tokenURI(idx);
+            const currentProperty = {
+              id: idx,
+              owner,
+              websiteId,
+              booking,
+            };
+            console.log("ready props: ", currentProperty);
             availableUpdate.push(currentProperty);
           }
         } catch (e) {
@@ -285,36 +281,24 @@ function App(props) {
     if (readContracts && readContracts[propertyName] && allPropertiesCount > 0) updateAvailableProperties();
   }, [allPropertiesCount, rentEvents, mintEvents]);
 
+  const handleDateChange = range => {
+    setStartDate(range[0].format("X"));
+    setEndDate(range[1].format("X"));
+  };
+
   const OwnerNftCard = item => {
     const id = item.id.toNumber();
+    const start = moment(item.booking.startDate.toNumber() * 1000).format("YYYY-MM-DD");
+    const end = moment(item.booking.endDate.toNumber() * 1000).format("YYYY-MM-DD");
     const cardActions = [];
-    if (item.reserved) {
+    if (item.booking.state === 3 || item.booking.state === 0) {
       cardActions.push(
         <Button
           onClick={() => {
-            tx(writeContracts[propertyName].cancelBooking(id));
+            tx(writeContracts[propertyName].rejectBooking(id));
           }}
         >
-          Free
-        </Button>,
-      );
-    } else {
-      cardActions.push(
-        <Button
-          onClick={() => {
-            tx(writeContracts[propertyName].toggleStatus(id));
-          }}
-        >
-          {item.available ? "Deny " : "Allow "} booking
-        </Button>,
-      );
-      cardActions.push(
-        <Button
-          onClick={() => {
-            tx(writeContracts[propertyName].reserveProperty(id));
-          }}
-        >
-          Reserve
+          {item.booking.state === 3 ? "Free" : "Reject"}
         </Button>,
       );
     }
@@ -329,27 +313,115 @@ function App(props) {
             </div>
           }
         >
-          owner:
-          <Address address={item.owner} blockExplorer={blockExplorer} fontSize={16} />
+          {item.booking.state === 3 && (
+            <>
+              <h3>Reserved</h3>
+              <div>
+                Period: {start} - {end}
+              </div>
+            </>
+          )}
+          {item.booking.state === 1 && (
+            <>
+              <h3>Confirmed</h3>
+              <div>
+                Period: {start} - {end}
+              </div>
+              <div>
+                Price: {ethers.utils.formatEther(item.booking.price)} {coinName}
+              </div>
+            </>
+          )}
+          {item.booking.state === 2 && (
+            <>
+              <h3>Paid</h3>
+              <div>
+                Period: {start} - {end}
+              </div>
+              <div>
+                Price: {ethers.utils.formatEther(item.booking.price)} {coinName}
+              </div>
+            </>
+          )}
+          {item.booking.state === 0 && (
+            <>
+              <h3>Booked</h3>
+              <div>
+                Period: {start} - {end}
+              </div>
+              <div>
+                renter: <Address address={item.booking.renter} blockExplorer={blockExplorer} fontSize={16} />
+              </div>
+              <EtherInput
+                value={amount}
+                placeholder="Total price"
+                onChange={value => {
+                  setAmount(value);
+                }}
+              />
+              <Button
+                disabled={!amount}
+                onClick={() => {
+                  tx(writeContracts[propertyName].confirmBooking(id, ethers.utils.parseEther("0" + amount)));
+                }}
+              >
+                Confirm
+              </Button>
+            </>
+          )}
+          {item.booking.state === 4 && (
+            <>
+              <Space direction="vertical" size={12}>
+                <RangePicker onChange={handleDateChange} />
+              </Space>
+              <Button
+                disabled={!startDate || !endDate || startDate > endDate}
+                onClick={() => {
+                  tx(writeContracts[propertyName].reserveProperty(id, startDate, endDate));
+                }}
+              >
+                Reserve
+              </Button>
+            </>
+          )}
         </Card>
       </>
     );
   };
 
+  const handleBookDateChange = range => {
+    setStartBookDate(range[0].format("X"));
+    setEndBookDate(range[1].format("X"));
+  };
+
   const NftCard = item => {
     const cardActions = [];
-    console.log(item.owner, address);
-    if (item.owner != address) {
+    const id = item.id;
+    if (item.owner !== address) {
       cardActions.push(
         <div>
           owned by:
           <Address address={item.owner} blockExplorer={blockExplorer} minimized />
         </div>,
-        <Button onClick={() => {}}>Book</Button>,
       );
+      if (item.booking.state === 1) {
+        // pay the booking
+        cardActions.push(
+          <Button
+            onClick={() => {
+              tx(writeContracts[propertyName].payBooking(id));
+            }}
+          >
+            Pay
+          </Button>,
+        )
+      }
     } else {
       cardActions.push(<div>OWN ASSET</div>);
     }
+    console.log("book: ", startBookDate, endBookDate);
+    const start = moment(item.booking.startDate.toNumber() * 1000).format("YYYY-MM-DD");
+    const end = moment(item.booking.endDate.toNumber() * 1000).format("YYYY-MM-DD");
     return (
       <Card
         style={{ width: 200 }}
@@ -362,15 +434,57 @@ function App(props) {
           </div>
         }
       >
-        <div style={{ opacity: 0.77 }}>Start Date - End date</div>
-        <div style={{ padding: 3, fontWeight: "bold" }}>Price: 0.0 {coinName}</div>
+        {item.booking.state === 4 && item.owner !== address && (
+          <>
+            <Space direction="vertical" size={12}>
+              <RangePicker onChange={handleBookDateChange} />
+            </Space>
+            <Button
+              disabled={!startBookDate || !endBookDate || startBookDate > endBookDate}
+              onClick={() => {
+                tx(writeContracts[propertyName].createBooking(id, startDate, endDate));
+              }}
+            >
+              Book
+            </Button>
+          </>
+        )}
+        {item.booking.state === 0 && (
+          <>
+            <h3>Booked</h3>
+            <div>
+              Period: {start} - {end}
+            </div>
+          </>
+        )}
+        {item.booking.state === 1 && (
+          <>
+            <h3>Confirmed</h3>
+            <div>
+              Period: {start} - {end}
+            </div>
+            <div>
+              Price: {ethers.utils.formatEther(item.booking.price)} {coinName}
+            </div>
+          </>
+        )}
+        {item.booking.state === 2 && (
+          <>
+            <h3>Paid</h3>
+            <div>
+              Period: {start} - {end}
+            </div>
+            <div>
+              Price: {ethers.utils.formatEther(item.booking.price)} {coinName}
+            </div>
+          </>
+        )}
       </Card>
     );
   };
 
   const galleryList = [];
   for (let a in availableProperties) {
-    console.log("item: ", availableProperties[a]);
     galleryList.push(NftCard(availableProperties[a]));
   }
 
@@ -388,7 +502,7 @@ function App(props) {
               }}
               to="/"
             >
-              For booking
+              Booking
             </Link>
           </Menu.Item>
           <Menu.Item key="/owner">
@@ -398,7 +512,7 @@ function App(props) {
               }}
               to="/owner"
             >
-              Properties
+              Owner
             </Link>
           </Menu.Item>
           <Menu.Item key="/mint">
@@ -429,7 +543,7 @@ function App(props) {
         <Switch>
           <Route exact path="/">
             <div style={{ width: 640, margin: "auto", marginTop: 32, paddingBottom: 32 }}>
-              <StackGrid columnWidth={200} gutterWidth={16} gutterHeight={16}>
+              <StackGrid columnWidth={200} gutterWidth={32} gutterHeight={32}>
                 {galleryList}
               </StackGrid>
             </div>

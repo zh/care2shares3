@@ -15,10 +15,8 @@ require("dotenv").config();
 const { isAddress, getAddress, formatUnits, parseUnits } = utils;
 
 const defaultNetwork = process.env.NETWORK || "localhost";
-const infuraKey = process.env.INFURA_KEY;
-const deployerAddress = process.env.DEPLOYER;
 const walletURL = process.env.WALLET_URL || "http://localhost:3000";
-const tokensContract = "AwesomeAssets";
+const tokensContract = "Property";
 
 /*
       📡 This is where you configure your deploy configuration for 🏗 scaffold-eth
@@ -33,212 +31,39 @@ const tokensContract = "AwesomeAssets";
 // Select the network you want to deploy to here:
 //
 
-function mnemonic(network = "mainnet") {
-  try {
-    const fileName = network === "mainnet" ? "mnemonic" : `mnemonic_${network}`;
-    return fs.readFileSync(`./${fileName}.txt`).toString().trim();
-  } catch (e) {
-    if (defaultNetwork !== "localhost") {
-      console.log(
-        "☢️ WARNING: No mnemonic file created for a deploy account. Try `npm run generate` and th  en `npm run account`."
-      );
-    }
-  }
-  return "";
-}
-
 module.exports = {
   defaultNetwork,
   networks: {
     localhost: {
       url: "http://localhost:8545",
     },
-    kovan: {
-      url: "https://kovan.infura.io/v3/" + infuraKey,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
-    },
     rinkeby: {
       url: process.env.ALCHEMY_RINKEBY_URL,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
-    },
-    xdai: {
-      url: "https://rpc.xdaichain.com/",
-      chainId: 100,
-      gasPrice: 1000000000,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
+      accounts: [process.env.PRIVATE_KEY],
     },
     polygon: {
       url: "https://polygon-rpc.com/",
       chainId: 137,
       gasPrice: 1000000000,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
+      accounts: [process.env.PRIVATE_KEY],
     },
     mumbai: {
       url: "https://rpc-mumbai.maticvigil.com/",
       chainId: 80001,
       gasPrice: 1000000000,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
-    },
-    testnetSmartBCH: {
-      url: "http://35.220.203.194:8545", // "https://moeing.tech:9545",
-      chainId: 10001,
-      gasPrice: 1050000000,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
-    },
-    mainnetSmartBCH: {
-      url: "https://smartbch.greyh.at", // "https://global.uat.cash",
-      chainId: 10000,
-      gasPrice: 1050000000,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
-    },
-    localAvalanche: {
-      url: "http://localhost:9650/ext/bc/C/rpc",
-      gasPrice: 250000000000,
-      chainId: 43112,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
-    },
-    fujiAvalanche: {
-      url: "https://api.avax-test.network/ext/bc/C/rpc",
-      gasPrice: 250000000000,
-      chainId: 43113,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
-    },
-    mainnetAvalanche: {
-      url: "https://api.avax.network/ext/bc/C/rpc",
-      gasPrice: 250000000000,
-      chainId: 43114,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
-    },
-    testnetFantom: {
-      url: "https://rpc.testnet.fantom.network/",
-      chainId: 4002,
-      gasPrice: 1800000000,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
-    },
-    fantomOpera: {
-      url: "https://rpc.ftm.tools/",
-      chainId: 250,
-      gasPrice: 1600000000,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
+      accounts: [process.env.PRIVATE_KEY],
     },
     testnetHarmony: {
       url: "https://api.s0.b.hmny.io",
       gasPrice: 1000000000,
       chainId: 1666700000,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
+      accounts: [process.env.PRIVATE_KEY],
     },
     mainnetHarmony: {
       url: "https://api.harmony.one",
       gasPrice: 1000000000,
       chainId: 1666600000,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
-    },
-    moondev: {
-      url: "http://127.0.0.1:9933",
-      chainId: 1281,
-      accounts: {
-        mnemonic: mnemonic("moon"),
-      },
-    },
-    moonbase: {
-      url: "https://rpc.testnet.moonbeam.network",
-      gasPrice: 1000000000,
-      chainId: 1287,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
-    },
-    moonbeam: {
-      url: "https://rpc.api.moonbeam.network",
-      gasPrice: 1000000000,
-      chainId: 1284,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
-    },
-    moonriver: {
-      url: "https://rpc.moonriver.moonbeam.network",
-      chainId: 1285,
-      gasPrice: 1000000000,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
-    },
-    testnetTomo: {
-      url: "https://rpc.testnet.tomochain.com",
-      chainId: 89,
-      gasPrice: 1000000000,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
-    },
-    mainnetTomo: {
-      url: "https://rpc.tomochain.com",
-      chainId: 88,
-      gasPrice: 1000000000,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
-    },
-    testnetBSC: {
-      url: "https://data-seed-prebsc-1-s1.binance.org:8545",
-      chainId: 97,
-      gasPrice: 20000000000,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
-    },
-    mainnetBSC: {
-      url: "https://bsc-dataseed.binance.org/",
-      chainId: 56,
-      gasPrice: 20000000000,
-      accounts: {
-        mnemonic: mnemonic(),
-      },
-    },
-    bakerloo: {
-      url: "https://rpc4.bakerloo.autonity.network:8545",
-      chainId: 444900,
-      gasPrice: 10000000000,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
-    },
-    kaleido: {
-      url: `https://${process.env.KALEIDO_USER}:${process.env.KALEIDO_PASS}@${process.env.KALEIDO_URL}.kaleido.io/`,
-      chainId: parseInt(process.env.KALEIDO_CHAINID, 10),
-      gasPrice: 1000000000,
-      accounts: {
-        mnemonic: mnemonic("testnet"),
-      },
+      accounts: [process.env.PRIVATE_KEY],
     },
   },
   solidity: {
@@ -279,12 +104,6 @@ module.exports = {
     deployer: {
       default: 0, // here this will by default take the first account as deployer
     },
-    mainnetSmartBCH: deployerAddress,
-    testnetSmartBCH: deployerAddress,
-    fujiAva: deployerAddress,
-    mainnetAva: deployerAddress,
-    testnetFantom: deployerAddress,
-    fantomOpera: deployerAddress,
   },
 };
 
