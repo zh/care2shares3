@@ -414,7 +414,7 @@ function App(props) {
           >
             Pay
           </Button>,
-        )
+        );
       }
     } else {
       cardActions.push(<div>OWN ASSET</div>);

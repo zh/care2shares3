@@ -7,6 +7,7 @@ async function main() {
   await propertyContract.deployed();
   console.log("Contract deployed to:", propertyContract.address);
 
+  console.log("---[ START ]---");
   let tx = await propertyContract.safeMint(owner.address, "metadata");
   await tx.wait();
   let book = await propertyContract.getBooking(1);
@@ -135,6 +136,7 @@ async function main() {
   tx = await propertyContract.rejectBooking(1);
   await tx.wait();
   console.log("reserved?: ", await propertyContract.propertyReserved(1));
+  console.log("---[ END ]---");
 }
 
 // We recommend this pattern to be able to use async/await everywhere
