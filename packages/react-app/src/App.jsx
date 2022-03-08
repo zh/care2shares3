@@ -445,7 +445,7 @@ function App(props) {
                 tx(writeContracts[propertyName].createBooking(id, startDate, endDate));
               }}
             >
-              Book
+              Book Request
             </Button>
           </>
         )}
