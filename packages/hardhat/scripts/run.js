@@ -100,7 +100,9 @@ async function main() {
   }
   try {
     console.log("***[!] pay unconfirmed error");
-    tx = await propertyContract.connect(somebodyElse).payBooking(1);
+    tx = await propertyContract
+      .connect(somebodyElse)
+      .payBooking(1, { value: price });
     await tx.wait();
   } catch (e) {
     console.log(e);
@@ -114,11 +116,25 @@ async function main() {
   console.log("after confirmed?: ", await propertyContract.bookingConfirmed(1));
   book = await propertyContract.getBooking(1);
   console.log("confirmed: ", book);
+  // RENTER: now enough money error
+  try {
+    const lowPrice = hre.ethers.utils.parseEther("0.05");
+    console.log("***[!] not enough payment error");
+    tx = await propertyContract
+      .connect(somebodyElse)
+      .payBooking(1, { value: lowPrice });
+    await tx.wait();
+  } catch (e) {
+    console.log(e);
+  }
+  console.log("after error paid?: ", await propertyContract.bookingPaid(1));
   // RENTER: pay for the rent
   console.log("before paid?: ", await propertyContract.bookingPaid(1));
-  tx = await propertyContract.connect(somebodyElse).payBooking(1);
+  tx = await propertyContract
+    .connect(somebodyElse)
+    .payBooking(1, { value: price });
   await tx.wait();
-  console.log("after paid?: ", await propertyContract.bookingPaid(1));
+  console.log("after success paid?: ", await propertyContract.bookingPaid(1));
   book = await propertyContract.getBooking(1);
   console.log("paid: ", book);
 

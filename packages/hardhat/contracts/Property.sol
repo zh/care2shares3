@@ -169,9 +169,17 @@ contract Property is
     // TODO: make this payable
     function payBooking(uint256 _propertyId)
         external
+        payable
         inState(_propertyId, State.Confirmed)
     {
+        require(
+            msg.value >= _bookingById[_propertyId].price,
+            "Payment is not enough"
+        );
         _bookingById[_propertyId].state = State.Paid;
+        address payable propOwner = payable(ownerOf(_propertyId));
+        (bool success, ) = propOwner.call{value: msg.value}("");
+        require(success, "Failed to send Ether");
         emit Booked(_propertyId, msg.sender, "paid");
     }
 

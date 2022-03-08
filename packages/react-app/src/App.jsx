@@ -345,7 +345,7 @@ function App(props) {
           )}
           {item.booking.state === 0 && (
             <>
-              <h3>Booked</h3>
+              <h3>Book Request</h3>
               <div>
                 Period: {start} - {end}
               </div>
@@ -409,7 +409,7 @@ function App(props) {
         cardActions.push(
           <Button
             onClick={() => {
-              tx(writeContracts[propertyName].payBooking(id));
+              tx(writeContracts[propertyName].payBooking(id, { value: item.booking.price }));
             }}
           >
             Pay
@@ -451,7 +451,7 @@ function App(props) {
         )}
         {item.booking.state === 0 && (
           <>
-            <h3>Booked</h3>
+            <h3>Book Request</h3>
             <div>
               Period: {start} - {end}
             </div>
