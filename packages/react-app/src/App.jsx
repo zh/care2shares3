@@ -398,12 +398,6 @@ function App(props) {
     const cardActions = [];
     const id = item.id;
     if (item.owner !== address) {
-      cardActions.push(
-        <div>
-          owned by:
-          <Address address={item.owner} blockExplorer={blockExplorer} minimized />
-        </div>,
-      );
       if (item.booking.state === 1) {
         // pay the booking
         cardActions.push(
@@ -414,26 +408,37 @@ function App(props) {
           >
             Pay
           </Button>,
+          <Button
+            onClick={() => {
+              tx(writeContracts[propertyName].cancelBooking(id));
+            }}
+          >
+            Cancel
+          </Button>,
         );
       }
     } else {
       cardActions.push(<div>OWN ASSET</div>);
     }
-    console.log("book: ", startBookDate, endBookDate);
+    console.log("book request: ", id, startBookDate, endBookDate);
     const start = moment(item.booking.startDate.toNumber() * 1000).format("YYYY-MM-DD");
     const end = moment(item.booking.endDate.toNumber() * 1000).format("YYYY-MM-DD");
     return (
       <Card
         style={{ width: 200 }}
-        key={item.id}
+        key={id}
         actions={cardActions}
         title={
           <div>
-            <span style={{ fontSize: props.fontSize || 16, marginRight: 8 }}>#{item.id}</span>
+            <span style={{ fontSize: props.fontSize || 16, marginRight: 8 }}>#{id}</span>
             ID: {item.websiteId}{" "}
           </div>
         }
       >
+        <div>
+          owned by:
+          <Address address={item.owner} blockExplorer={blockExplorer} minimized />
+        </div>
         {item.booking.state === 4 && item.owner !== address && (
           <>
             <Space direction="vertical" size={12}>
@@ -442,7 +447,7 @@ function App(props) {
             <Button
               disabled={!startBookDate || !endBookDate || startBookDate > endBookDate}
               onClick={() => {
-                tx(writeContracts[propertyName].createBooking(id, startDate, endDate));
+                tx(writeContracts[propertyName].createBooking(id, startBookDate, endBookDate));
               }}
             >
               Book Request
