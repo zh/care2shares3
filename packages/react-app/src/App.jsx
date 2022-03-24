@@ -34,23 +34,9 @@ const targetNetwork = NETWORKS.localhost;
 // const targetNetwork = NETWORKS.rinkeby;
 // const targetNetwork = NETWORKS.polygon;
 // const targetNetwork = NETWORKS.mumbai;
-// const targetNetwork = NETWORKS.testnetSmartBCH;
-// const targetNetwork = NETWORKS.testnetSmartBCH;
-// const targetNetwork = NETWORKS.mainnetSmartBCH;
-// const targetNetwork = NETWORKS.fujiAvalanche;
-// const targetNetwork = NETWORKS.mainnetAvalanche;
-// const targetNetwork = NETWORKS.testnetFantom;
-// const targetNetwork = NETWORKS.fantomOpera;
-// const targetNetwork = NETWORKS.moondev;
-// const targetNetwork = NETWORKS.moonbase;
-// const targetNetwork = NETWORKS.moonbeam;
-// const targetNetwork = NETWORKS.moonriver;
-// const targetNetwork = NETWORKS.testnetTomo;
-// const targetNetwork = NETWORKS.mainnetTomo;
+// const targetNetwork = NETWORKS.testnetHarmony;
 // const targetNetwork = NETWORKS.testnetBSC;
 // const targetNetwork = NETWORKS.mainnetBSC;
-// const targetNetwork = NETWORKS.bakerloo;
-// const targetNetwork = NETWORKS.kaleido;
 
 // 😬 Sorry for all the console logging
 const DEBUG = false;

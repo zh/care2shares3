@@ -55,7 +55,7 @@ module.exports = {
     },
     testnetHarmony: {
       url: "https://api.s0.b.hmny.io",
-      gasPrice: 1000000000,
+      gasPrice: 100000000000,
       chainId: 1666700000,
       accounts: [process.env.PRIVATE_KEY],
     },
@@ -63,6 +63,18 @@ module.exports = {
       url: "https://api.harmony.one",
       gasPrice: 1000000000,
       chainId: 1666600000,
+      accounts: [process.env.PRIVATE_KEY],
+    },
+    testnetBSC: {
+      url: "https://data-seed-prebsc-1-s1.binance.org:8545",
+      chainId: 97,
+      gasPrice: 20000000000,
+      accounts: [process.env.PRIVATE_KEY],
+    },
+    mainnetBSC: {
+      url: "https://bsc-dataseed.binance.org/",
+      chainId: 56,
+      gasPrice: 20000000000,
       accounts: [process.env.PRIVATE_KEY],
     },
   },
